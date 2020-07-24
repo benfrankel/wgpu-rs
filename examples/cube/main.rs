@@ -94,7 +94,8 @@ struct Example {
     vertex_buf: wgpu::Buffer,
     index_buf: wgpu::Buffer,
     index_count: usize,
-    bind_group: wgpu::BindGroup,
+    uniform_bind_group: wgpu::BindGroup,
+    texture_bind_group: wgpu::BindGroup,
     uniform_buf: wgpu::Buffer,
     pipeline: wgpu::RenderPipeline,
 }
@@ -133,7 +134,7 @@ impl framework::Example for Example {
             .create_buffer_with_data(bytemuck::cast_slice(&index_data), wgpu::BufferUsage::INDEX);
 
         // Create pipeline layout
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        let uniform_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
             entries: Borrowed(&[
                 wgpu::BindGroupLayoutEntry::new(
@@ -144,8 +145,13 @@ impl framework::Example for Example {
                         min_binding_size: wgpu::BufferSize::new(64),
                     },
                 ),
+            ]),
+        });
+        let texture_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: Borrowed(&[
                 wgpu::BindGroupLayoutEntry::new(
-                    1,
+                    0,
                     wgpu::ShaderStage::FRAGMENT,
                     wgpu::BindingType::SampledTexture {
                         multisampled: false,
@@ -154,14 +160,17 @@ impl framework::Example for Example {
                     },
                 ),
                 wgpu::BindGroupLayoutEntry::new(
-                    2,
+                    1,
                     wgpu::ShaderStage::FRAGMENT,
                     wgpu::BindingType::Sampler { comparison: false },
                 ),
             ]),
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: Borrowed(&[&bind_group_layout]),
+            bind_group_layouts: Borrowed(&[
+                &uniform_bind_group_layout,
+                &texture_bind_group_layout,
+            ]),
             push_constant_ranges: Borrowed(&[]),
         });
 
@@ -215,20 +224,26 @@ impl framework::Example for Example {
             wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
         );
 
-        // Create bind group
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &bind_group_layout,
+        // Create bind groups
+        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &uniform_bind_group_layout,
             entries: Borrowed(&[
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::Buffer(uniform_buf.slice(..)),
                 },
+            ]),
+            label: None,
+        });
+        let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &texture_bind_group_layout,
+            entries: Borrowed(&[
                 wgpu::BindGroupEntry {
-                    binding: 1,
+                    binding: 0,
                     resource: wgpu::BindingResource::TextureView(&texture_view),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 2,
+                    binding: 1,
                     resource: wgpu::BindingResource::Sampler(&sampler),
                 },
             ]),
@@ -291,7 +306,8 @@ impl framework::Example for Example {
             vertex_buf,
             index_buf,
             index_count: index_data.len(),
-            bind_group,
+            uniform_bind_group,
+            texture_bind_group,
             uniform_buf,
             pipeline,
         }
@@ -340,7 +356,8 @@ impl framework::Example for Example {
             });
             rpass.push_debug_group("Prepare data for draw.");
             rpass.set_pipeline(&self.pipeline);
-            rpass.set_bind_group(0, &self.bind_group, &[]);
+            rpass.set_bind_group(0, &self.uniform_bind_group, &[]);
+            rpass.set_bind_group(1, &self.texture_bind_group, &[]);
             rpass.set_index_buffer(self.index_buf.slice(..));
             rpass.set_vertex_buffer(0, self.vertex_buf.slice(..));
             rpass.pop_debug_group();
